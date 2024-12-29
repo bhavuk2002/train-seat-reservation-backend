@@ -2,6 +2,12 @@ const { Seat } = require("../models");
 
 const initializeSeats = async (req, res) => {
   try {
+    const role = req.user.role;
+    console.log(req.user);
+    if (role === "user") {
+      return res.status(401).json("Only admin can reset.");
+    }
+
     // Clear any existing seat records (optional, depending on your setup)
     await Seat.destroy({ where: {} });
 

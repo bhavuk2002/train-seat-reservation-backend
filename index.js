@@ -6,7 +6,7 @@ const port = process.env.PORT;
 
 // Sync database
 sequelize
-  .sync({}) // Use `force: true` for development to drop/recreate tables
+  .sync({ force: false }) // Use `force: true` for development to drop/recreate tables
   .then(() => {
     console.log("Database synced successfully");
   })

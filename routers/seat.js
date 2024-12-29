@@ -1,6 +1,8 @@
 const express = require("express");
 const { Seat, User } = require("../models");
 const { initializeSeats } = require("../controller/seatController");
+const { where } = require("sequelize");
+const { authenticateToken } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -22,8 +24,8 @@ router.get("/all", async (req, res) => {
   }
 });
 
-router.post("/reserve", async (req, res) => {
-  const userId = 1;
+router.post("/reserve", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
   const { seatCount } = req.body;
 
   // Validate seat count (between 1 and 7)
@@ -140,10 +142,10 @@ router.post("/:seatId/cancel", async (req, res) => {
   }
 });
 
-router.post("/initialisation", initializeSeats);
+router.post("/initialisation", authenticateToken, initializeSeats);
 
 // Reset all seats (Admin only)
-router.post("/reset", async (req, res) => {
+router.post("/reset", authenticateToken, async (req, res) => {
   try {
     await Seat.update({ reserved_by: null }, { where: {} });
     res.status(200).json({ message: "All seats have been reset." });
