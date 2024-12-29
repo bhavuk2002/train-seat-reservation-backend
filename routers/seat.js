@@ -18,7 +18,10 @@ router.get("/all", async (req, res) => {
         },
       ],
     });
-    res.status(200).json(seats);
+    const unreservedSeatsCount = await Seat.count({
+      where: { reserved_by: null },
+    });
+    res.status(200).json(seats, unreservedSeatsCount);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
