@@ -13,6 +13,6 @@ const allowedOrigins = [
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use("/api/users", userRoutes);
-app.use("/api/seats", seatRoutes);
+app.use("/api/seat", seatRoutes);
 
 module.exports = app;
