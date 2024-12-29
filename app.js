@@ -12,7 +12,7 @@ const allowedOrigins = [
 ];
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
-app.use("/api/user", userRoutes);
-app.use("/api/seat", seatRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/seats", seatRoutes);
 
 module.exports = app;

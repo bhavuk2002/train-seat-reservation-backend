@@ -1,7 +1,6 @@
 const express = require("express");
 const { Seat, User } = require("../models");
 const { initializeSeats } = require("../controller/seatController");
-const { where } = require("sequelize");
 const { authenticateToken } = require("../middleware/auth");
 
 const router = express.Router();
@@ -123,9 +122,9 @@ router.post("/reserve", authenticateToken, async (req, res) => {
   }
 });
 
-router.post("/:seatId/cancel", async (req, res) => {
+router.post("/:seatId/cancel", authenticateToken, async (req, res) => {
   const { seatId } = req.params;
-
+  const userId = req.user.id;
   try {
     const seat = await Seat.findByPk(seatId);
     if (!seat) {
@@ -135,7 +134,9 @@ router.post("/:seatId/cancel", async (req, res) => {
     if (!seat.reserved_by) {
       return res.status(400).json({ error: "Seat is not reserved" });
     }
-
+    if (seat.reserved_by !== userId) {
+      return res.status(401).json({ error: "Booked by another user." });
+    }
     seat.reserved_by = null;
     await seat.save();
 
