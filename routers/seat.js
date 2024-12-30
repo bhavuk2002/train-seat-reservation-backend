@@ -26,6 +26,102 @@ router.get("/all", async (req, res) => {
   }
 });
 
+// router.post("/reserve", authenticateToken, async (req, res) => {
+//   const userId = req.user.id;
+//   const { seatCount } = req.body;
+
+//   // Validate seat count (between 1 and 7)
+//   if (seatCount < 1 || seatCount > 7) {
+//     return res
+//       .status(400)
+//       .json({ error: "You can reserve between 1 to 7 seats only." });
+//   }
+
+//   try {
+//     // Check the total number of unreserved seats
+//     const unreservedSeatsCount = await Seat.count({
+//       where: { reserved_by: null },
+//     });
+
+//     // If there are no unreserved seats, return an error indicating that all seats are filled
+//     if (unreservedSeatsCount === 0) {
+//       return res.status(400).json({ error: "All seats are filled." });
+//     }
+
+//     // Fetch all available seats, ordered by row and seat number.
+//     const availableSeats = await Seat.findAll({
+//       where: { reserved_by: null },
+//       order: [
+//         ["row", "ASC"],
+//         ["seat_number", "ASC"],
+//       ],
+//     });
+
+//     // If not enough available seats
+//     if (availableSeats.length < seatCount) {
+//       return res.status(400).json({ error: "Not enough seats available." });
+//     }
+
+//     const seatsToReserve = [];
+//     const seatMap = {}; // Group seats by rows
+
+//     availableSeats.forEach((seat) => {
+//       if (!seatMap[seat.row]) seatMap[seat.row] = [];
+//       seatMap[seat.row].push(seat);
+//     });
+
+//     // Try to find a row with enough seats
+//     let rowSeats = null;
+//     for (const row in seatMap) {
+//       if (seatMap[row].length >= seatCount) {
+//         rowSeats = seatMap[row].slice(0, seatCount);
+//         break;
+//       }
+//     }
+
+//     // If no row with enough seats, try booking nearby seats from adjacent rows
+//     if (!rowSeats) {
+//       let remainingSeats = seatCount;
+//       for (const row in seatMap) {
+//         for (const seat of seatMap[row]) {
+//           if (remainingSeats === 0) break;
+//           seatsToReserve.push(seat);
+//           remainingSeats--;
+//         }
+//         if (remainingSeats === 0) break;
+//       }
+
+//       // If not enough seats available in nearby rows (edge case)
+//       if (remainingSeats > 0) {
+//         return res
+//           .status(400)
+//           .json({ error: "Not enough seats available in nearby rows." });
+//       }
+//     } else {
+//       // Otherwise, if enough seats found in a row, reserve them
+//       seatsToReserve.push(...rowSeats);
+//     }
+
+//     // Handle edge case for 7 seat reservation
+//     // If trying to reserve 7 seats but we can only book 6 or fewer, return error.
+//     if (seatCount === 7 && seatsToReserve.length < 7) {
+//       return res
+//         .status(400)
+//         .json({ error: "Not enough seats available to reserve 7 seats." });
+//     }
+
+//     // Reserve the selected seats
+//     for (const seat of seatsToReserve) {
+//       seat.reserved_by = userId;
+//       await seat.save();
+//     }
+
+//     res.status(200).json(seatsToReserve);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
 router.post("/reserve", authenticateToken, async (req, res) => {
   const userId = req.user.id;
   const { seatCount } = req.body;
@@ -43,7 +139,6 @@ router.post("/reserve", authenticateToken, async (req, res) => {
       where: { reserved_by: null },
     });
 
-    // If there are no unreserved seats, return an error indicating that all seats are filled
     if (unreservedSeatsCount === 0) {
       return res.status(400).json({ error: "All seats are filled." });
     }
@@ -57,57 +152,84 @@ router.post("/reserve", authenticateToken, async (req, res) => {
       ],
     });
 
-    // If not enough available seats
     if (availableSeats.length < seatCount) {
       return res.status(400).json({ error: "Not enough seats available." });
     }
 
-    const seatsToReserve = [];
-    const seatMap = {}; // Group seats by rows
-
+    const seatMap = {};
     availableSeats.forEach((seat) => {
       if (!seatMap[seat.row]) seatMap[seat.row] = [];
       seatMap[seat.row].push(seat);
     });
 
-    // Try to find a row with enough seats
-    let rowSeats = null;
-    for (const row in seatMap) {
-      if (seatMap[row].length >= seatCount) {
-        rowSeats = seatMap[row].slice(0, seatCount);
-        break;
-      }
-    }
+    const seatsToReserve = [];
 
-    // If no row with enough seats, try booking nearby seats from adjacent rows
-    if (!rowSeats) {
+    // Step 1: Try booking a new row
+    const tryNewRow = () => {
+      for (const row in seatMap) {
+        const rowSeats = seatMap[row];
+        if (rowSeats.length === 7 && seatCount <= 7) {
+          seatsToReserve.push(...rowSeats.slice(0, seatCount));
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // Step 2: Try filling gaps in proximity
+    const fillGapsInProximity = () => {
+      for (const row in seatMap) {
+        const rowSeats = seatMap[row];
+        if (rowSeats.length >= seatCount) {
+          const contiguousSeats = findContiguousSeats(rowSeats, seatCount);
+          if (contiguousSeats) {
+            seatsToReserve.push(...contiguousSeats);
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Step 3: Book nearby seats from multiple rows
+    const bookNearbySeats = () => {
       let remainingSeats = seatCount;
       for (const row in seatMap) {
-        for (const seat of seatMap[row]) {
+        if (remainingSeats === 0) break;
+        const rowSeats = seatMap[row];
+        for (const seat of rowSeats) {
           if (remainingSeats === 0) break;
           seatsToReserve.push(seat);
           remainingSeats--;
         }
-        if (remainingSeats === 0) break;
       }
+      return remainingSeats === 0;
+    };
 
-      // If not enough seats available in nearby rows (edge case)
-      if (remainingSeats > 0) {
-        return res
-          .status(400)
-          .json({ error: "Not enough seats available in nearby rows." });
+    // Function to find contiguous seats
+    const findContiguousSeats = (seats, count) => {
+      let tempSeats = [];
+      for (let i = 0; i < seats.length; i++) {
+        if (
+          tempSeats.length > 0 &&
+          seats[i].seat_number !==
+            tempSeats[tempSeats.length - 1].seat_number + 1
+        ) {
+          tempSeats = [];
+        }
+        tempSeats.push(seats[i]);
+        if (tempSeats.length === count) {
+          return tempSeats;
+        }
       }
-    } else {
-      // Otherwise, if enough seats found in a row, reserve them
-      seatsToReserve.push(...rowSeats);
-    }
+      return null;
+    };
 
-    // Handle edge case for 7 seat reservation
-    // If trying to reserve 7 seats but we can only book 6 or fewer, return error.
-    if (seatCount === 7 && seatsToReserve.length < 7) {
+    // Execute steps in priority order
+    if (!tryNewRow() && !fillGapsInProximity() && !bookNearbySeats()) {
       return res
         .status(400)
-        .json({ error: "Not enough seats available to reserve 7 seats." });
+        .json({ error: "Not enough seats available in proximity." });
     }
 
     // Reserve the selected seats
